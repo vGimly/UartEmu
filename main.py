@@ -1,4 +1,5 @@
 import logging
+import sys
 
 from contextlib import asynccontextmanager
 
@@ -11,6 +12,10 @@ from uart import UARTServer
 logging.basicConfig(
     level=logging.DEBUG,
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    handlers=[
+        logging.StreamHandler(sys.stdout),
+        logging.FileHandler("uart.log"),
+    ],
 )
 
 uart = UARTServer(host="10.9.0.1", port=7000)
