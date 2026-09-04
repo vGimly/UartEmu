@@ -43,7 +43,7 @@ check:
 	$(python) -m black --check *.py t/*.py t/*/*.py
 
 req:
-	$(pip) freeze --local > $(req)
+	$(pip) freeze --local | grep -Fv pkg_resources==0.0.0 > $(req)
 
 init:
 	test -x $(python) || python3 -m venv $(VE)
