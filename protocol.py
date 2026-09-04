@@ -209,10 +209,7 @@ class FrameParser:
                 "frame too short",
             )
 
-        received_crc = (
-            (self.tail[0] << 8) |
-            self.tail[1]
-        )
+        received_crc = (self.tail[0] << 8) | self.tail[1]
 
         calculated_crc = self.crc
 
@@ -227,8 +224,7 @@ class FrameParser:
 
             return ProtocolError(
                 ERROR_CRC,
-                "received=0x%04x calculated=0x%04x"
-                % (received_crc, calculated_crc),
+                "received=0x%04x calculated=0x%04x" % (received_crc, calculated_crc),
             )
 
         # At least CMD must be present.
@@ -313,11 +309,7 @@ def encode_frame(cmd, payload):
     body.append((crc >> 8) & 0xFF)
     body.append(crc & 0xFF)
 
-    frame = (
-        bytes((START_STOP,)) +
-        escape(body) +
-        bytes((START_STOP,))
-    )
+    frame = bytes((START_STOP,)) + escape(body) + bytes((START_STOP,))
 
     log.info(
         "ENCODE cmd=0x%02x payload=%s crc=0x%04x",

@@ -155,13 +155,18 @@ class UARTServer:
             )
 
     async def handle_frame(self, writer, peer, frame):
-        """
-        Application handling will be added here.
+        if frame.cmd == 0x01:
+            answer = b"OK=" + frame.payload
+            data = encode_frame(frame.cmd, answer)
 
-        For now there is no response.
-        """
+            await self.send(writer, peer, data)
+            return
 
-        pass
+        log.warning(
+            "unknown command %s: 0x%02x",
+            peer,
+            frame.cmd,
+        )
 
     async def send_error(self, writer, peer, error_code):
         data = encode_error(error_code)
