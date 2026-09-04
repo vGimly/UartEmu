@@ -6,6 +6,7 @@ from protocol import (
     FrameParser,
     ProtocolError,
     encode_error,
+    encode_frame,
 )
 
 

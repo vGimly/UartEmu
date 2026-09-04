@@ -1,19 +1,20 @@
-.PHONY: run start stop kill restart test verify nginx status test-protocol
+.PHONY: run start stop kill restart test verify nginx status test-protocol format check req init
 
 app:=main
-host:=127.0.0.1
-port:=8000
 
-python:=.venv/bin/python
-uvicorn:=.venv/bin/uvicorn
-pytest:=.venv/bin/pytest
-pip:=.venv/bin/pip
+req:=requirements.txt
+VE:=.venv
+VB:=$(VE)/bin
+python:=$(VB)/python
+uvicorn:=$(VB)/uvicorn
+pytest:=$(VB)/pytest
+pip:=$(VB)/pip
 
 run:
-	$(uvicorn) $(app):app --host $(host) --port $(port)
+	$(uvicorn) $(app):app --host 127.0.0.1 --port 8000 $(EXTRA)
 
 dev:
-	$(uvicorn) $(app):app --host $(host) --port $(port) --reload
+	$(MAKE) run EXTRA=--reload
 
 start:
 	screen -mS uart-emu $(MAKE) run
@@ -27,18 +28,23 @@ status:
 	screen -list | grep '[.]uart-emu' || true
 
 verify:
-	$(python) -c 'import main'
+	$(python) -c 'import $(app)'
 
 test:
-#	$(python) -m pytest
-	$(pytest) -v
-
-test-protocol:
-	$(pytest) -v test_uart.py
+	$(pytest) -v t
 
 nginx:
 	sudo nginx -s reload
 
+format:
+	$(python) -m black *.py t/*.py
+
+check:
+	$(python) -m black --check *.py t/*.py
+
 req:
-	$(pip) freeze > requirements.txt
-# .venv/bin/pip install pytest pytest-asyncio
+	$(pip) freeze --local > $(req)
+
+init:
+	test -x $(python) || python3 -m venv $(VR)
+	$(pip) install -r $(req)
