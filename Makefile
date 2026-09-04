@@ -46,5 +46,5 @@ req:
 	$(pip) freeze --local > $(req)
 
 init:
-	test -x $(python) || python3 -m venv $(VR)
-	$(pip) install -r $(req)
+	test -x $(python) || python3 -m venv $(VE)
+	$(pip) install --proxy http://10.9.0.1:8118 -r $(req)
