@@ -4,6 +4,13 @@ from pydantic import BaseModel, Field
 
 router = APIRouter()
 
+uart = None
+
+
+def set_uart_server(server):
+    global uart
+    uart = server
+
 
 class EventRequest(BaseModel):
     cmd: int = Field(..., ge=0, le=255)
@@ -56,7 +63,7 @@ async def inject_event(event: EventRequest):
             detail="payload must be hexadecimal",
         )
 
-    count = await uart_server.inject_event(
+    count = await uart.inject_event(
         event.cmd,
         payload,
     )

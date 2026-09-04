@@ -5,9 +5,8 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from api import router
+from api import router, set_uart_server
 from uart import UARTServer
-
 
 logging.basicConfig(
     level=logging.DEBUG,
@@ -19,6 +18,7 @@ logging.basicConfig(
 )
 
 uart = UARTServer(host="10.9.0.1", port=7000)
+set_uart_server(uart)
 
 
 @asynccontextmanager

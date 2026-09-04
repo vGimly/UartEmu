@@ -169,7 +169,12 @@ class UARTServer:
 
         count = 0
 
-        for writer, peer in clients:
+        for writer in clients:
+            if writer is exclude:
+                continue
+
+            peer = writer.get_extra_info("peername")
+
             try:
                 writer.write(data)
                 await writer.drain()
