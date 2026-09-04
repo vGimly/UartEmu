@@ -288,6 +288,15 @@ class FrameParser:
 
         return None
 
+def calc_crc(cmd, payload):
+    crc = CRC16_INIT
+
+    crc = update_crc(cmd, crc)
+
+    for byte in payload:
+        crc = update_crc(byte, crc)
+
+    return crc
 
 def encode_frame(cmd, payload):
     """
@@ -301,10 +310,7 @@ def encode_frame(cmd, payload):
     body.append(cmd)
     body.extend(payload)
 
-    crc = CRC16_INIT
-
-    for byte in body:
-        crc = update_crc(byte, crc)
+    crc = calc_crc(cmd, payload)
 
     body.append((crc >> 8) & 0xFF)
     body.append(crc & 0xFF)
