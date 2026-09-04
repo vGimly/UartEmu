@@ -1,8 +1,12 @@
 import asyncio
+import logging
+
+
+log = logging.getLogger("uart")
 
 
 class UARTServer:
-    def __init__(self, host="127.0.0.1", port=7000):
+    def __init__(self, host="10.9.0.1", port=7000):
         self.host = host
         self.port = port
         self.server = None
@@ -15,7 +19,11 @@ class UARTServer:
             self.port,
         )
 
-        print(f"UART server listening on {self.host}:{self.port}")
+        log.info(
+            "UART server listening on %s:%d",
+            self.host,
+            self.port,
+        )
 
     async def stop(self):
         for writer in list(self.clients):
@@ -38,7 +46,7 @@ class UARTServer:
         self.clients.add(writer)
 
         peer = writer.get_extra_info("peername")
-        print(f"UART client connected: {peer}")
+        log.info("client connected: %s", peer)
 
         try:
             while True:
@@ -47,7 +55,16 @@ class UARTServer:
                 if not data:
                     break
 
-                print(f"RX {data.hex()}")
+                log.debug(
+                    "RX %s: %s",
+                    peer,
+                    data.hex(" "),
+                )
+
+                # Пока просто echo для проверки транспорта.
+                # Позже здесь будет parser.
+                writer.write(data)
+                await writer.drain()
 
         finally:
             self.clients.discard(writer)
@@ -59,7 +76,7 @@ class UARTServer:
             except Exception:
                 pass
 
-            print(f"UART client disconnected: {peer}")
+            log.info("client disconnected: %s", peer)
 
     @property
     def client_count(self):

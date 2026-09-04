@@ -1,3 +1,5 @@
+import logging
+
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -6,11 +8,18 @@ from api import router
 from uart import UARTServer
 
 
-uart = UARTServer()
+logging.basicConfig(
+    level=logging.DEBUG,
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+)
+
+uart = UARTServer(host="10.9.0.1", port=7000)
 
 
 @asynccontextmanager
 async def lifespan(app):
+    app.state.uart = uart
+
     await uart.start()
 
     yield
