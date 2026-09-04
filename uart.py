@@ -155,6 +155,49 @@ class UARTServer:
                 event.code,
             )
 
+    async def inject_event(self, cmd, payload):
+        data = encode_frame(cmd, payload)
+
+        clients = list(self.clients.items())
+
+        log.info(
+            "EVENT cmd=0x%02x payload=%s clients=%d",
+            cmd,
+            payload.hex(" "),
+            len(clients),
+        )
+
+        count = 0
+
+        for writer, peer in clients:
+            try:
+                writer.write(data)
+                await writer.drain()
+
+                count += 1
+
+                log.info(
+                    "EVENT TX %s: cmd=0x%02x payload=%s",
+                    peer,
+                    cmd,
+                    payload.hex(" "),
+                )
+
+                if self.traffic_logging:
+                    log.debug(
+                        "TX %s: %s",
+                        peer,
+                        data.hex(" "),
+                    )
+
+            except Exception:
+                log.exception(
+                    "event delivery failed: %s",
+                    peer,
+                )
+
+        return count
+
     async def handle_frame(self, writer, peer, frame):
         if frame.cmd == 0x01:
             answer = b"OK=" + frame.payload

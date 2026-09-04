@@ -11,9 +11,7 @@ def parse(data):
 
 
 def test_empty_payload():
-    event = parse(
-        encode_frame(0x01, b"")
-    )
+    event = parse(encode_frame(0x01, b""))
 
     assert isinstance(event, Frame)
     assert event.cmd == 0x01
@@ -21,9 +19,7 @@ def test_empty_payload():
 
 
 def test_payload():
-    event = parse(
-        encode_frame(0x01, b"hello")
-    )
+    event = parse(encode_frame(0x01, b"hello"))
 
     assert isinstance(event, Frame)
     assert event.cmd == 0x01
@@ -33,9 +29,7 @@ def test_payload():
 def test_binary_payload():
     payload = bytes(range(256))
 
-    event = parse(
-        encode_frame(0x01, payload)
-    )
+    event = parse(encode_frame(0x01, payload))
 
     assert isinstance(event, Frame)
     assert event.cmd == 0x01

@@ -37,10 +37,10 @@ nginx:
 	sudo nginx -s reload
 
 format:
-	$(python) -m black *.py t/*.py
+	$(python) -m black *.py t/*.py t/*/*.py
 
 check:
-	$(python) -m black --check *.py t/*.py
+	$(python) -m black --check *.py t/*.py t/*/*.py
 
 req:
 	$(pip) freeze --local > $(req)

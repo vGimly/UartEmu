@@ -28,9 +28,7 @@ async def read_event(reader, timeout=2.0):
         )
 
         if not data:
-            raise AssertionError(
-                "connection closed while waiting for frame"
-            )
+            raise AssertionError("connection closed while waiting for frame")
 
         events = parser.feed(data)
 

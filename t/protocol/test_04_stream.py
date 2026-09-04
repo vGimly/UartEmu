@@ -21,10 +21,7 @@ def test_frame_split():
 def test_two_frames_in_one_chunk():
     parser = FrameParser()
 
-    data = (
-        encode_frame(0x01, b"one") +
-        encode_frame(0x01, b"two")
-    )
+    data = encode_frame(0x01, b"one") + encode_frame(0x01, b"two")
 
     events = parser.feed(data)
 

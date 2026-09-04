@@ -9,6 +9,7 @@ def parse(data):
     assert len(events) == 1
     return events[0]
 
+
 def escaped(cmd, payload, crc):
     data = bytes([cmd]) + payload + crc
 
@@ -23,6 +24,7 @@ def escaped(cmd, payload, crc):
             result.append(byte)
 
     return b"\x7e" + bytes(result) + b"\x7e"
+
 
 def test_crc_escape():
     for value in range(65536):
@@ -60,6 +62,4 @@ def test_crc_escape():
 
         return
 
-    raise AssertionError(
-        "no CRC containing 0x7d or 0x7e found"
-    )
+    raise AssertionError("no CRC containing 0x7d or 0x7e found")

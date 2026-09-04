@@ -22,6 +22,4 @@ def request(method, path, data=None):
     )
 
     with urllib.request.urlopen(request, timeout=2) as response:
-        return response.status, json.loads(
-            response.read()
-        )
+        return response.status, json.loads(response.read())

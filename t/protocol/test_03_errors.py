@@ -17,30 +17,36 @@ def parse(data):
 
 
 def test_empty_frame():
-    event = parse(bytes([
-        START_STOP,
-        START_STOP,
-    ]))
+    event = parse(
+        bytes(
+            [
+                START_STOP,
+                START_STOP,
+            ]
+        )
+    )
 
     assert isinstance(event, ProtocolError)
     assert event.code == ERROR_SHORT
 
 
 def test_one_byte_frame():
-    event = parse(bytes([
-        START_STOP,
-        0x01,
-        START_STOP,
-    ]))
+    event = parse(
+        bytes(
+            [
+                START_STOP,
+                0x01,
+                START_STOP,
+            ]
+        )
+    )
 
     assert isinstance(event, ProtocolError)
     assert event.code == ERROR_SHORT
 
 
 def test_bad_crc():
-    frame = bytearray(
-        encode_frame(0x01, b"hello")
-    )
+    frame = bytearray(encode_frame(0x01, b"hello"))
 
     # Change one byte of the CRC.
     frame[-2] ^= 0x01
@@ -54,12 +60,16 @@ def test_bad_crc():
 def test_garbage():
     parser = FrameParser()
 
-    events = parser.feed(bytes([
-        0x01,
-        0x02,
-        0x03,
-        START_STOP,
-    ]))
+    events = parser.feed(
+        bytes(
+            [
+                0x01,
+                0x02,
+                0x03,
+                START_STOP,
+            ]
+        )
+    )
 
     assert len(events) == 1
     assert isinstance(events[0], ProtocolError)

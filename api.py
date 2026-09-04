@@ -1,8 +1,13 @@
 from fastapi import APIRouter, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 router = APIRouter()
+
+
+class EventRequest(BaseModel):
+    cmd: int = Field(..., ge=0, le=255)
+    payload: str = ""
 
 
 class LoggingConfig(BaseModel):
@@ -38,4 +43,26 @@ async def status(request: Request):
     return {
         "status": "ok",
         "clients": uart.client_count,
+    }
+
+
+@router.post("/event")
+async def inject_event(event: EventRequest):
+    try:
+        payload = bytes.fromhex(event.payload)
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail="payload must be hexadecimal",
+        )
+
+    count = await uart_server.inject_event(
+        event.cmd,
+        payload,
+    )
+
+    return {
+        "cmd": event.cmd,
+        "payload": event.payload,
+        "clients": count,
     }

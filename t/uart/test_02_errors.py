@@ -17,11 +17,15 @@ async def test_short_frame():
     reader, writer = await connect_uart()
 
     try:
-        writer.write(bytes([
-            START_STOP,
-            0x01,
-            START_STOP,
-        ]))
+        writer.write(
+            bytes(
+                [
+                    START_STOP,
+                    0x01,
+                    START_STOP,
+                ]
+            )
+        )
         await writer.drain()
 
         event = await read_event(reader)
@@ -39,12 +43,16 @@ async def test_bad_escape():
     reader, writer = await connect_uart()
 
     try:
-        writer.write(bytes([
-            START_STOP,
-            0x01,
-            ESCAPE,
-            0x83,
-        ]))
+        writer.write(
+            bytes(
+                [
+                    START_STOP,
+                    0x01,
+                    ESCAPE,
+                    0x83,
+                ]
+            )
+        )
         await writer.drain()
 
         event = await read_event(reader)
@@ -62,9 +70,7 @@ async def test_bad_crc():
     reader, writer = await connect_uart()
 
     try:
-        frame = bytearray(
-            encode_frame(0x01, b"hello")
-        )
+        frame = bytearray(encode_frame(0x01, b"hello"))
 
         frame[-2] ^= 0x01
 

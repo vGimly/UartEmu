@@ -33,12 +33,16 @@ def test_escape_escape():
 
 
 def test_invalid_escape():
-    frame = parse(bytes([
-        0x7E,
-        0x01,
-        0x7D,
-        0x83,
-    ]))
+    frame = parse(
+        bytes(
+            [
+                0x7E,
+                0x01,
+                0x7D,
+                0x83,
+            ]
+        )
+    )
 
     assert isinstance(frame, ProtocolError)
     assert frame.code == ERROR_ESCAPE
