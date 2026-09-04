@@ -9,6 +9,10 @@ uvicorn:=.venv/bin/uvicorn
 
 run:
 	$(uvicorn) $(app):app --host $(host) --port $(port)
+
+dev:
+	$(uvicorn) $(app):app --host $(host) --port $(port) --reload
+
 start:
 	screen -mS uart-emu $(MAKE) run
 
