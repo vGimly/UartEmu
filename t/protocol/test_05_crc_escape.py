@@ -28,11 +28,11 @@ def escaped(cmd, payload, crc):
 
 def test_crc_escape():
     for value in range(65536):
-        payload = value.to_bytes(2, "big")
+        payload = value.to_bytes(2, "little")
 
         crc = calc_crc(0x01, payload)
 
-        crc_bytes = crc.to_bytes(2, "big")
+        crc_bytes = crc.to_bytes(2, "little")
 
         if 0x7D not in crc_bytes and 0x7E not in crc_bytes:
             continue

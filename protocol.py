@@ -209,7 +209,7 @@ class FrameParser:
                 "frame too short",
             )
 
-        received_crc = (self.tail[0] << 8) | self.tail[1]
+        received_crc = (self.tail[1] << 8) | self.tail[0]
 
         calculated_crc = self.crc
 
@@ -314,8 +314,8 @@ def encode_frame(cmd, payload):
 
     crc = calc_crc(cmd, payload)
 
-    body.append((crc >> 8) & 0xFF)
     body.append(crc & 0xFF)
+    body.append((crc >> 8) & 0xFF)
 
     frame = bytes((START_STOP,)) + escape(body) + bytes((START_STOP,))
 
