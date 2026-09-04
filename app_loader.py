@@ -9,3 +9,7 @@ def reload():
 
 def command(client, cmd, payload):
     return application.command(client, cmd, payload)
+
+
+def dump_state():
+    return application.state.dump()

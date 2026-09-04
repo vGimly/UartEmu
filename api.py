@@ -89,3 +89,8 @@ async def reload_app():
     return {
         "status": "ok",
     }
+
+
+@router.get("/state")
+async def get_state():
+    return app_loader.dump_state()
