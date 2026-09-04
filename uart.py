@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import app_loader
 
 from protocol import (
     Frame,
@@ -155,10 +156,10 @@ class UARTServer:
                 event.code,
             )
 
-    async def inject_event(self, cmd, payload):
+    async def inject_event(self, cmd, payload, exclude=None):
         data = encode_frame(cmd, payload)
 
-        clients = list(self.clients.items())
+        clients = list(self.clients)
 
         log.info(
             "EVENT cmd=0x%02x payload=%s clients=%d",
@@ -204,18 +205,23 @@ class UARTServer:
         return count
 
     async def handle_frame(self, writer, peer, frame):
-        if frame.cmd == 0x01:
-            answer = b"OK=" + frame.payload
-            data = encode_frame(frame.cmd, answer)
-
-            await self.send(writer, peer, data)
-            return
-
-        log.warning(
-            "unknown command %s: 0x%02x",
+        answer = app_loader.command(
             peer,
             frame.cmd,
+            frame.payload,
         )
+
+        if answer is None:
+            log.warning(
+                "unknown command %s: 0x%02x",
+                peer,
+                frame.cmd,
+            )
+            return
+
+        data = encode_frame(frame.cmd, answer)
+
+        await self.send(writer, peer, data)
 
     async def send_error(self, writer, peer, error_code):
         data = encode_error(error_code)

@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Request
 from pydantic import BaseModel, Field
-
+import app_loader
 
 router = APIRouter()
 
@@ -72,4 +72,20 @@ async def inject_event(event: EventRequest):
         "cmd": event.cmd,
         "payload": event.payload,
         "clients": count,
+    }
+
+
+@router.put("/reload_app")
+async def reload_app():
+    try:
+        app_loader.reload()
+    except Exception:
+        logging.exception("application reload failed")
+        raise HTTPException(
+            status_code=500,
+            detail="application reload failed",
+        )
+
+    return {
+        "status": "ok",
     }
