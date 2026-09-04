@@ -3,7 +3,7 @@ import re
 import pytest
 
 from protocol import encode_frame
-from lib.uart import connect_uart, read_event
+from lib.uart import connect_uart, uart_command
 
 
 @pytest.mark.asyncio
@@ -11,15 +11,15 @@ async def test_datetime():
     reader, writer = await connect_uart()
 
     try:
-        writer.write(encode_frame(0x03, b""))
-        await writer.drain()
+        payload = await uart_command(
+            reader,
+            writer,
+            0x03,
+        )
 
-        event = await read_event(reader)
-
-        assert event.cmd == 0x03
         assert re.fullmatch(
             rb"\d{8} \d{6}",
-            event.payload,
+            payload,
         )
 
     finally:
