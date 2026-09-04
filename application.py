@@ -1,4 +1,5 @@
 from state import DeviceState
+import datetime
 
 state = DeviceState()
 
@@ -9,6 +10,9 @@ def command(client, cmd, payload):
 
     if cmd == 0x02:
         return register_read_write(cmd, payload)
+
+    if cmd == 0x03:
+        return datetime.datetime.now().strftime("%Y%m%d %H%M%S").encode("ascii")
 
     return None
 
