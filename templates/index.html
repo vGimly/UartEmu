@@ -27,6 +27,9 @@
     .ok { background: #153325; color: #73d69a; }
     .warn { background: #3b3016; color: #e4c477; }
     a { color: #82b7ff; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    button { border: 1px solid #344150; background: #18212b; color: #dbe5ef; border-radius: 6px; padding: 5px 9px; cursor: pointer; }
+    button:hover { background: #202c38; }
     @media (max-width: 850px) { .stats, .grid { grid-template-columns: 1fr; } main { padding: 12px; } header { padding: 20px; } }
   </style>
 </head>
@@ -66,7 +69,6 @@
 
   <script>
     const api = './api';
-
     const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
     const fmtDuration = seconds => {
       seconds = Number(seconds || 0);
@@ -93,7 +95,7 @@
         document.getElementById('devices').innerHTML = devices.length ? devices.map(d => `
           <div class="row">
             <div><strong>${esc(d.name)}</strong><div class="sub mono">id=${esc(d.id)} · identity=${esc(d.identity)}</div></div>
-            <div><span class="badge">${esc(d.protocol)}</span><div class="sub">${d.state_entries} state entries</div></div>
+            <div style="text-align:right"><span class="badge">${esc(d.protocol)}</span><div class="sub">${d.state_entries} state entries</div><a href="./devices/${encodeURIComponent(d.id)}">Open state</a></div>
           </div>`).join('') : '<span class="muted">No devices</span>';
 
         document.getElementById('clients').innerHTML = clients.length ? clients.map(c => `
