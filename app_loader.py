@@ -66,7 +66,7 @@ def command(protocol, client, cmd, payload):
     return module.command(client, cmd, payload)
 
 
-def dump_state(protocol="application"):
+def dump_state(protocol="default"):
     module = _load(protocol)
 
     return module.state.dump()
