@@ -7,14 +7,9 @@ description: Default echo, register, and date-time protocol.
 import datetime
 
 from protocol import BaseProtocol
-from state import DeviceState
 
 
-class DefaultProtocol(BaseProtocol):
-    def __init__(self, client):
-        super().__init__(client)
-        self.state = DeviceState()
-
+class Protocol(BaseProtocol):
     def command(self, cmd, payload):
         if cmd == 0x01:
             return b"OK=" + payload
@@ -26,6 +21,3 @@ class DefaultProtocol(BaseProtocol):
             return datetime.datetime.now().strftime("%Y%m%d %H%M%S").encode("ascii")
 
         return None
-
-
-Protocol = DefaultProtocol
