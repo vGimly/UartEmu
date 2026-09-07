@@ -1,3 +1,4 @@
+import datetime
 import logging
 import sqlite3
 import uuid
@@ -15,6 +16,23 @@ def _db():
         _conn = get_connection()
         init_db(_conn)
     return _conn
+
+
+def _decorate_client(client):
+    if client is None:
+        return None
+
+    result = dict(client)
+    if result.get("connected") and result.get("connected_at"):
+        started = datetime.datetime.fromisoformat(
+            result["connected_at"].replace("Z", "+00:00")
+        )
+        result["session_duration_seconds"] = int(
+            (datetime.datetime.now(datetime.timezone.utc) - started).total_seconds()
+        )
+    else:
+        result["session_duration_seconds"] = 0
+    return result
 
 
 def list_devices():
@@ -97,7 +115,7 @@ def list_clients():
         ORDER BY clients.connected DESC, clients.last_seen DESC
         """
     ).fetchall()
-    return [dict(row) for row in rows]
+    return [_decorate_client(row) for row in rows]
 
 
 def get_client(client_key):
@@ -112,7 +130,7 @@ def get_client(client_key):
         """,
         (client_key,),
     ).fetchone()
-    return dict(row) if row else None
+    return _decorate_client(row)
 
 
 def create_client(host, port=0, device_id=None):
@@ -136,7 +154,6 @@ def record_connect(host, port):
         "SELECT id FROM devices WHERE identity = 'default'"
     ).fetchone()
     device_id = default_device[0] if default_device else None
-
     _db().execute(
         """
         INSERT INTO clients(
