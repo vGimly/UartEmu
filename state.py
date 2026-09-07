@@ -1,25 +1,18 @@
-import sqlite3
+from db import DB_FILENAME, get_connection, init_db
 
 
 class DeviceState:
-    def __init__(self, filename="uart-state.db"):
-        self.db = sqlite3.connect(filename)
+    def __init__(self, filename=DB_FILENAME):
+        self.db = get_connection(filename)
+        init_db(self.db)
 
-        self.db.execute(
-            """
-            CREATE TABLE IF NOT EXISTS state (
-                address INTEGER PRIMARY KEY,
-                value INTEGER NOT NULL
-            )
-        """
-        )
-
-        self.db.commit()
-
-    def read(self, address, default=0):
+    def read(self, device_id, address, default=0):
         row = self.db.execute(
-            "SELECT value FROM state WHERE address = ?",
-            (address,),
+            """
+            SELECT value FROM state
+            WHERE device_id = ? AND address = ?
+            """,
+            (device_id, address),
         ).fetchone()
 
         if row is None:
@@ -27,22 +20,34 @@ class DeviceState:
 
         return row[0]
 
-    def write(self, address, value):
+    def write(self, device_id, address, value):
         self.db.execute(
             """
-            INSERT INTO state(address, value)
-            VALUES (?, ?)
-            ON CONFLICT(address)
+            INSERT INTO state(device_id, address, value)
+            VALUES (?, ?, ?)
+            ON CONFLICT(device_id, address)
             DO UPDATE SET value = excluded.value
             """,
-            (address, value),
+            (device_id, address, value),
         )
 
         self.db.commit()
 
-    def dump(self):
+    def dump(self, device_id):
         rows = self.db.execute(
-            "SELECT address, value FROM state ORDER BY address"
+            """
+            SELECT address, value FROM state
+            WHERE device_id = ?
+            ORDER BY address
+            """,
+            (device_id,),
         ).fetchall()
 
-        return {"0x%02x" % address: value for address, value in rows}
+        return {"0x%02x" % row[0]: row[1] for row in rows}
+
+    def clear(self, device_id):
+        self.db.execute(
+            "DELETE FROM state WHERE device_id = ?",
+            (device_id,),
+        )
+        self.db.commit()
