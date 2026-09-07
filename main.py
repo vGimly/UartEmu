@@ -2,8 +2,11 @@ import logging
 import sys
 
 from contextlib import asynccontextmanager
+from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import HTMLResponse
+from fastapi.templating import Jinja2Templates
 
 from api import router, set_uart_server
 from uart import UARTServer
@@ -19,6 +22,8 @@ logging.basicConfig(
 
 uart = UARTServer(host="10.9.0.1", port=7000)
 set_uart_server(uart)
+
+templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
 
 
 @asynccontextmanager
@@ -40,3 +45,12 @@ app = FastAPI(
 )
 
 app.include_router(router, prefix="/api")
+
+
+@app.get("/", response_class=HTMLResponse)
+async def index(request: Request):
+    return templates.TemplateResponse(
+        request=request,
+        name="index.html",
+        context={"title": "UART Emulator"},
+    )
