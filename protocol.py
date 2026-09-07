@@ -28,10 +28,67 @@ class Frame:
     crc: int
 
 
+class ProtocolError(Exception):
+    """Application-level protocol error returned to the client."""
+
+    def __init__(self, code, detail=""):
+        self.code = code
+        self.detail = detail
+        super().__init__(detail or code)
+
+    def payload(self):
+        text = "E-" + self.code
+        if self.detail:
+            text += ":" + self.detail
+        return text.encode("utf-8")
+
+
 @dataclass
-class ProtocolError:
+class FrameError:
     code: int
     detail: str = ""
+
+
+class BaseProtocol:
+    """Base class for protocol implementations bound to one client."""
+
+    def __init__(self, client):
+        self.client = client
+        self.state = None
+
+    def command(self, cmd, payload):
+        raise NotImplementedError
+
+    def register_read_write(self, address, payload):
+        if not payload:
+            raise ProtocolError("EMPTY_PAYLOAD")
+
+        operation = payload[0]
+        rest = payload[1:]
+
+        zeros = 0
+        while zeros < 5 and rest[:1] == b"\x00":
+            rest = rest[1:]
+            zeros += 1
+
+        device_id = self.client.get("device_id")
+        if device_id is None:
+            raise ProtocolError("NO_DEVICE")
+
+        if operation == 0x01:
+            value = self.state.read(device_id, address)
+            return str(value).encode("ascii")
+
+        if operation == 0x02:
+            try:
+                value = int(rest.decode("ascii"), 10)
+            except (UnicodeDecodeError, ValueError):
+                raise ProtocolError("INVALID_VALUE")
+
+            self.state.write(device_id, address, value)
+            return b""
+
+        raise ProtocolError("INVALID_OPERATION")
 
 
 class FrameParser:
@@ -79,7 +136,7 @@ class FrameParser:
                 return None
             log.warning("GARBAGE terminated by START")
             self.start_frame()
-            return ProtocolError(ERROR_GARBAGE, "garbage before start")
+            return FrameError(ERROR_GARBAGE, "garbage before start")
 
         if self.escaped:
             if byte == ESCAPE_START:
@@ -89,7 +146,7 @@ class FrameParser:
             else:
                 log.warning("invalid ESCAPE sequence: 7d %02x", byte)
                 self.reset()
-                return ProtocolError(ERROR_ESCAPE, "invalid escape 0x%02x" % byte)
+                return FrameError(ERROR_ESCAPE, "invalid escape 0x%02x" % byte)
             self.escaped = False
             return self.process_data_byte(byte)
 
@@ -122,12 +179,12 @@ class FrameParser:
         if self.escaped:
             log.warning("frame ended in ESCAPE state")
             self.reset()
-            return ProtocolError(ERROR_ESCAPE, "frame ended after escape")
+            return FrameError(ERROR_ESCAPE, "frame ended after escape")
 
         if len(self.tail) < 2:
             log.warning("SHORT frame: %d byte(s)", len(self.data) + len(self.tail))
             self.reset()
-            return ProtocolError(ERROR_SHORT, "frame too short")
+            return FrameError(ERROR_SHORT, "frame too short")
 
         received_crc = (self.tail[1] << 8) | self.tail[0]
         calculated_crc = self.crc
@@ -139,7 +196,7 @@ class FrameParser:
                 calculated_crc,
             )
             self.reset()
-            return ProtocolError(
+            return FrameError(
                 ERROR_CRC,
                 "received=0x%04x calculated=0x%04x" % (received_crc, calculated_crc),
             )
@@ -147,7 +204,7 @@ class FrameParser:
         if not self.data:
             log.warning("SHORT frame: no CMD")
             self.reset()
-            return ProtocolError(ERROR_SHORT, "no command")
+            return FrameError(ERROR_SHORT, "no command")
 
         cmd = self.data[0]
         payload = bytes(self.data[1:])
@@ -165,11 +222,11 @@ class FrameParser:
         if self.in_frame:
             log.warning("FRAME timeout")
             self.reset()
-            return ProtocolError(ERROR_TIMEOUT, "frame receive timeout")
+            return FrameError(ERROR_TIMEOUT, "frame receive timeout")
         if self.in_garbage:
             log.warning("GARBAGE timeout")
             self.reset()
-            return ProtocolError(ERROR_GARBAGE, "garbage receive timeout")
+            return FrameError(ERROR_GARBAGE, "garbage receive timeout")
         return None
 
 
