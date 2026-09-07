@@ -36,7 +36,7 @@ def get_device(device_id):
     return dict(row) if row else None
 
 
-def create_device(name, protocol="application", description=""):
+def create_device(name, protocol="default", description=""):
     ts = now()
 
     try:
@@ -187,7 +187,7 @@ def delete_client(host):
     return cur.rowcount > 0
 
 
-def protocol_for_host(host, default="application"):
+def protocol_for_host(host, default="default"):
     """
     Resolve which protocol module should handle frames from `host`,
     based on the device (if any) assigned to that client.
