@@ -45,21 +45,18 @@ class ClientAssign(BaseModel):
 
 @router.get("/logging")
 async def get_logging(request: Request):
-    uart = request.app.state.uart
-    return {"traffic": uart.traffic_logging}
+    return {"traffic": request.app.state.uart.traffic_logging}
 
 
 @router.put("/logging")
 async def set_logging(config: LoggingConfig, request: Request):
-    uart = request.app.state.uart
-    uart.traffic_logging = config.traffic
-    return {"traffic": uart.traffic_logging}
+    request.app.state.uart.traffic_logging = config.traffic
+    return {"traffic": request.app.state.uart.traffic_logging}
 
 
 @router.get("/status")
 async def status(request: Request):
-    uart = request.app.state.uart
-    return {"status": "ok", "clients": uart.client_count}
+    return {"status": "ok", "clients": request.app.state.uart.client_count}
 
 
 @router.post("/event")
@@ -68,7 +65,6 @@ async def inject_event(event: EventRequest, request: Request):
         payload = bytes.fromhex(event.payload)
     except ValueError:
         raise HTTPException(status_code=400, detail="payload must be hexadecimal")
-
     count = await request.app.state.uart.inject_event(event.cmd, payload)
     return {"cmd": event.cmd, "payload": event.payload, "clients": count}
 
@@ -83,12 +79,15 @@ async def reload_app(protocol: Optional[str] = None):
     return {"status": "ok"}
 
 
-@router.get("/state/{device_id}")
-async def get_state(device_id: int):
-    device = registry.get_device(device_id)
+@router.get("/state")
+async def get_state(device_id: Optional[int] = None):
+    if device_id is None:
+        device = registry.get_device_by_identity("default")
+    else:
+        device = registry.get_device(device_id)
     if device is None:
         raise HTTPException(status_code=404, detail="device not found")
-    return app_loader.dump_state(device["protocol"], device_id)
+    return app_loader.dump_state(device["protocol"], device["id"])
 
 
 @router.get("/protocols")
@@ -105,13 +104,7 @@ async def list_devices():
 async def create_device(device: DeviceCreate):
     if not app_loader.validate_protocol(device.protocol):
         raise HTTPException(status_code=400, detail="unknown protocol module: %s" % device.protocol)
-
-    created = registry.create_device(
-        device.name,
-        device.protocol,
-        device.description,
-        device.identity,
-    )
+    created = registry.create_device(device.name, device.protocol, device.description, device.identity)
     if created is None:
         raise HTTPException(status_code=409, detail="device name or identity already exists")
     return created
@@ -129,7 +122,6 @@ async def get_device(device_id: int):
 async def update_device(device_id: int, device: DeviceUpdate):
     if device.protocol is not None and not app_loader.validate_protocol(device.protocol):
         raise HTTPException(status_code=400, detail="unknown protocol module: %s" % device.protocol)
-
     updated = registry.update_device(
         device_id,
         name=device.name,
