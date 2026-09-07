@@ -30,8 +30,15 @@ class DeviceState:
             """,
             (device_id, address, value),
         )
-
         self.db.commit()
+
+    def delete(self, device_id, address):
+        cur = self.db.execute(
+            "DELETE FROM state WHERE device_id = ? AND address = ?",
+            (device_id, address),
+        )
+        self.db.commit()
+        return cur.rowcount > 0
 
     def dump(self, device_id):
         rows = self.db.execute(
@@ -42,7 +49,6 @@ class DeviceState:
             """,
             (device_id,),
         ).fetchall()
-
         return {"0x%02x" % row[0]: row[1] for row in rows}
 
     def clear(self, device_id):
