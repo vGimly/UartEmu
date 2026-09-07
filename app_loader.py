@@ -27,8 +27,8 @@ def _load(protocol):
     return module
 
 
-def create(protocol, client):
-    return _load(protocol).Protocol(client)
+def create(protocol, client, state):
+    return _load(protocol).Protocol(client, state)
 
 
 def validate_protocol(protocol):
@@ -51,9 +51,9 @@ def reload(protocol=None):
     importlib.reload(module)
 
 
-def command(protocol, client, cmd, payload):
+def command(protocol, client, state, cmd, payload):
     try:
-        instance = create(protocol, client)
+        instance = create(protocol, client, state)
     except ImportError:
         log.error("unknown protocol module: %s", protocol)
         return None
@@ -61,28 +61,17 @@ def command(protocol, client, cmd, payload):
     return instance.command(cmd, payload)
 
 
-def dump_state(protocol, device_id):
-    module = _load(protocol)
-    instance = module.Protocol({"device_id": device_id})
-    if instance.state is None or device_id is None:
+def dump_state(device_id, state):
+    if device_id is None:
         return {}
-    return instance.state.dump(device_id)
+    return state.dump(device_id)
 
 
-def clear_state(protocol, device_id):
-    try:
-        module = _load(protocol)
-    except ImportError:
+def clear_state(device_id, state):
+    if device_id is None:
         return
-
-    instance = module.Protocol({"device_id": device_id})
-    if instance.state is not None and device_id is not None:
-        instance.state.clear(device_id)
-        log.info(
-            "cleared state: device=%s protocol=%s",
-            device_id,
-            protocol,
-        )
+    state.clear(device_id)
+    log.info("cleared state: device=%s", device_id)
 
 
 def _read_header(path):
