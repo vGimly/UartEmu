@@ -12,13 +12,13 @@ state = DeviceState()
 
 
 def command(client, cmd, payload):
-    if cmd == 0x01:
+    if cmd == 0x01: # echo
         return b"OK=" + payload
 
-    if cmd == 0x02:
+    if cmd == 0x02: # read-write register
         return register_read_write(cmd, payload)
 
-    if cmd == 0x03:
+    if cmd == 0x03: # date-time
         return datetime.datetime.now().strftime("%Y%m%d %H%M%S").encode("ascii")
 
     return None
@@ -26,7 +26,7 @@ def command(client, cmd, payload):
 
 def register_read_write(id, payload):
     if not payload:
-        return None
+        return b"-2"
 
     operation = payload[0]
     rest = payload[1:]
@@ -45,9 +45,9 @@ def register_read_write(id, payload):
         try:
             value = int(rest.decode("ascii"), 10)
         except (UnicodeDecodeError, ValueError):
-            return None
+            return b"-1"
 
         state.write(id, value)
         return b""
 
-    return None
+    return b"-3"
