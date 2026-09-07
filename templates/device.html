@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ title }}</title>
+  <style>
+    :root { color-scheme: dark; font-family: Inter, system-ui, sans-serif; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; background: #0b0f14; color: #e7edf5; }
+    header { padding: 20px 32px; border-bottom: 1px solid #202833; background: #10151c; }
+    header a { color: #82b7ff; text-decoration: none; }
+    main { max-width: 1000px; margin: auto; padding: 22px; }
+    .card { background: #111820; border: 1px solid #222d39; border-radius: 12px; padding: 18px; margin-bottom: 14px; }
+    h1 { margin: 0 0 5px; font-size: 22px; }
+    h2 { margin: 0 0 14px; font-size: 15px; }
+    .muted { color: #8795a5; font-size: 13px; }
+    .meta { color: #8795a5; font-size: 12px; font-family: ui-monospace, monospace; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { text-align: left; padding: 9px 8px; border-bottom: 1px solid #1d2630; }
+    th { color: #8795a5; font-size: 12px; font-weight: 500; }
+    td { font-family: ui-monospace, monospace; }
+    input { width: 100%; border: 1px solid #344150; background: #0d1319; color: #e7edf5; border-radius: 6px; padding: 7px 9px; }
+    button { border: 1px solid #344150; background: #18212b; color: #dbe5ef; border-radius: 6px; padding: 7px 10px; cursor: pointer; }
+    button:hover { background: #202c38; }
+    .toolbar { display: flex; gap: 8px; margin-bottom: 14px; }
+    .toolbar input { max-width: 180px; }
+    .error { color: #ff8f8f; margin-top: 10px; }
+    .ok { color: #73d69a; margin-top: 10px; }
+  </style>
+</head>
+<body>
+  <header><a href="../">← UART Emulator</a></header>
+  <main>
+    <section class="card">
+      <h1 id="name">Device</h1>
+      <div id="meta" class="meta">Loading...</div>
+    </section>
+
+    <section class="card">
+      <h2>State</h2>
+      <div class="toolbar">
+        <input id="address" placeholder="Address, e.g. 0x02">
+        <input id="value" placeholder="Value">
+        <button onclick="writeState()">Write</button>
+        <button onclick="clearState()">Clear all</button>
+      </div>
+      <table>
+        <thead><tr><th>Address</th><th>Value</th><th></th></tr></thead>
+        <tbody id="state"><tr><td colspan="3" class="muted">Loading...</td></tr></tbody>
+      </table>
+      <div id="message"></div>
+    </section>
+  </main>
+
+  <script>
+    const api = '../api';
+    const deviceId = {{ device_id }};
+    const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+    async function jsonRequest(url, options) {
+      const response = await fetch(url, options);
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.detail || response.statusText);
+      return data;
+    }
+
+    function showMessage(text, error = false) {
+      const node = document.getElementById('message');
+      node.className = error ? 'error' : 'ok';
+      node.textContent = text;
+    }
+
+    async function load() {
+      try {
+        const [device, state] = await Promise.all([
+          jsonRequest(`${api}/devices/${deviceId}`),
+          jsonRequest(`${api}/devices/${deviceId}/state`)
+        ]);
+        document.getElementById('name').textContent = device.name;
+        document.getElementById('meta').textContent = `id=${device.id} · identity=${device.identity} · protocol=${device.protocol}`;
+        const entries = Object.entries(state);
+        document.getElementById('state').innerHTML = entries.length ? entries.map(([address, value]) => `
+          <tr><td>${esc(address)}</td><td>${esc(value)}</td><td><button onclick="deleteState('${encodeURIComponent(address)}')">Delete</button></td></tr>`).join('') : '<tr><td colspan="3" class="muted">No state entries</td></tr>';
+      } catch (error) {
+        showMessage(error.message, true);
+      }
+    }
+
+    async function writeState() {
+      const address = document.getElementById('address').value.trim();
+      const value = Number(document.getElementById('value').value.trim());
+      if (!address || !Number.isInteger(value)) return showMessage('Enter an address and integer value', true);
+      const parsed = Number(address);
+      if (!Number.isInteger(parsed) || parsed < 0) return showMessage('Address must be a non-negative integer', true);
+      try {
+        await jsonRequest(`${api}/devices/${deviceId}/state/${parsed}`, {
+          method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({value})
+        });
+        showMessage('State updated');
+        await load();
+      } catch (error) { showMessage(error.message, true); }
+    }
+
+    async function deleteState(address) {
+      const parsed = Number(decodeURIComponent(address));
+      try {
+        await jsonRequest(`${api}/devices/${deviceId}/state/${parsed}`, {method: 'DELETE'});
+        showMessage('State entry deleted');
+        await load();
+      } catch (error) { showMessage(error.message, true); }
+    }
+
+    async function clearState() {
+      if (!confirm('Clear all state entries for this device?')) return;
+      try {
+        await jsonRequest(`${api}/devices/${deviceId}/state`, {method: 'DELETE'});
+        showMessage('State cleared');
+        await load();
+      } catch (error) { showMessage(error.message, true); }
+    }
+
+    load();
+  </script>
+</body>
+</html>
