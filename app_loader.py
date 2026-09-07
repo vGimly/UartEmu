@@ -27,12 +27,17 @@ def _load(protocol):
     return module
 
 
+def _create(protocol, client):
+    module = _load(protocol)
+    return module.Protocol(client)
+
+
 def validate_protocol(protocol):
     try:
-        _load(protocol)
+        module = _load(protocol)
     except ImportError:
         return False
-    return True
+    return hasattr(module, "Protocol")
 
 
 def reload(protocol=None):
@@ -49,22 +54,20 @@ def reload(protocol=None):
 
 def command(protocol, client, cmd, payload):
     try:
-        module = _load(protocol)
+        instance = _create(protocol, client)
     except ImportError:
         log.error("unknown protocol module: %s", protocol)
         return None
 
-    return module.command(client, cmd, payload)
+    return instance.command(cmd, payload)
 
 
 def dump_state(protocol, device_id):
     module = _load(protocol)
-    state = getattr(module, "state", None)
-
-    if state is None or device_id is None:
+    instance = module.Protocol({"device_id": device_id})
+    if instance.state is None or device_id is None:
         return {}
-
-    return state.dump(device_id)
+    return instance.state.dump(device_id)
 
 
 def clear_state(protocol, device_id):
@@ -73,9 +76,9 @@ def clear_state(protocol, device_id):
     except ImportError:
         return
 
-    state = getattr(module, "state", None)
-    if state is not None and hasattr(state, "clear") and device_id is not None:
-        state.clear(device_id)
+    instance = module.Protocol({"device_id": device_id})
+    if instance.state is not None and device_id is not None:
+        instance.state.clear(device_id)
         log.info(
             "cleared state: device=%s protocol=%s",
             device_id,
