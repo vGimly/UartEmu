@@ -43,6 +43,10 @@ class ClientAssign(BaseModel):
     device_id: Optional[int] = None
 
 
+class StateWrite(BaseModel):
+    value: int
+
+
 @router.get("/logging")
 async def get_logging(request: Request):
     return {"traffic": request.app.state.uart.traffic_logging}
@@ -80,14 +84,50 @@ async def reload_app(protocol: Optional[str] = None):
 
 
 @router.get("/state")
-async def get_state(device_id: Optional[int] = None):
+async def get_state(request: Request, device_id: Optional[int] = None):
     if device_id is None:
         device = registry.get_device_by_identity("default")
     else:
         device = registry.get_device(device_id)
     if device is None:
         raise HTTPException(status_code=404, detail="device not found")
-    return app_loader.dump_state(device["protocol"], device["id"])
+    return request.app.state.uart.state.dump(device["id"])
+
+
+@router.get("/devices/{device_id}/state")
+async def get_device_state(device_id: int, request: Request):
+    if registry.get_device(device_id) is None:
+        raise HTTPException(status_code=404, detail="device not found")
+    return request.app.state.uart.state.dump(device_id)
+
+
+@router.put("/devices/{device_id}/state/{address}")
+async def write_device_state(device_id: int, address: int, value: StateWrite, request: Request):
+    if registry.get_device(device_id) is None:
+        raise HTTPException(status_code=404, detail="device not found")
+    if address < 0:
+        raise HTTPException(status_code=400, detail="address must be non-negative")
+    request.app.state.uart.state.write(device_id, address, value.value)
+    return {"address": "0x%02x" % address, "value": value.value}
+
+
+@router.delete("/devices/{device_id}/state/{address}")
+async def delete_device_state(device_id: int, address: int, request: Request):
+    if registry.get_device(device_id) is None:
+        raise HTTPException(status_code=404, detail="device not found")
+    if address < 0:
+        raise HTTPException(status_code=400, detail="address must be non-negative")
+    if not request.app.state.uart.state.delete(device_id, address):
+        raise HTTPException(status_code=404, detail="state entry not found")
+    return {"status": "ok"}
+
+
+@router.delete("/devices/{device_id}/state")
+async def clear_device_state(device_id: int, request: Request):
+    if registry.get_device(device_id) is None:
+        raise HTTPException(status_code=404, detail="device not found")
+    request.app.state.uart.state.clear(device_id)
+    return {"status": "ok"}
 
 
 @router.get("/protocols")
