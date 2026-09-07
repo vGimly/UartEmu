@@ -11,11 +11,9 @@ _conn = None
 
 def _db():
     global _conn
-
     if _conn is None:
         _conn = get_connection()
         init_db(_conn)
-
     return _conn
 
 
@@ -134,13 +132,19 @@ def create_client(host, port=0, device_id=None):
 def record_connect(host, port):
     client_key = str(uuid.uuid4())
     ts = now()
+    default_device = _db().execute(
+        "SELECT id FROM devices WHERE identity = 'default'"
+    ).fetchone()
+    device_id = default_device[0] if default_device else None
+
     _db().execute(
         """
         INSERT INTO clients(
-            client_key, host, port, connected, first_seen, connected_at, last_seen
-        ) VALUES (?, ?, ?, 1, ?, ?, ?)
+            client_key, host, port, device_id, connected,
+            first_seen, connected_at, last_seen
+        ) VALUES (?, ?, ?, ?, 1, ?, ?, ?)
         """,
-        (client_key, host, port, ts, ts, ts),
+        (client_key, host, port, device_id, ts, ts, ts),
     )
     _db().commit()
     return client_key
