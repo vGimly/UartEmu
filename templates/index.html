@@ -1,59 +1,65 @@
 <!doctype html>
-<html lang="ru">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{ title }}</title>
   <style>
-    :root { color-scheme: dark; font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    :root { color-scheme: dark; font-family: Inter, system-ui, sans-serif; }
     * { box-sizing: border-box; }
     body { margin: 0; min-height: 100vh; background: #0b0f14; color: #e7edf5; }
-    header { padding: 28px 32px 20px; border-bottom: 1px solid #202833; background: #10151c; }
-    header h1 { margin: 0 0 6px; font-size: 24px; }
-    header p { margin: 0; color: #8d9aaa; }
-    main { max-width: 1200px; margin: 0 auto; padding: 24px 20px 48px; }
-    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
-    .card { background: #111820; border: 1px solid #222d39; border-radius: 12px; padding: 18px; box-shadow: 0 8px 30px rgba(0,0,0,.18); }
-    .card h2 { margin: 0 0 14px; font-size: 16px; }
-    .muted { color: #8795a5; }
-    .row { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid #1d2630; }
+    header { padding: 24px 32px; border-bottom: 1px solid #202833; background: #10151c; }
+    header h1 { margin: 0 0 4px; font-size: 23px; }
+    header p { margin: 0; color: #8997a7; }
+    main { max-width: 1280px; margin: auto; padding: 22px; }
+    .stats, .grid { display: grid; gap: 14px; }
+    .stats { grid-template-columns: repeat(4, 1fr); margin-bottom: 14px; }
+    .grid { grid-template-columns: 1fr 1fr; }
+    .card { background: #111820; border: 1px solid #222d39; border-radius: 12px; padding: 17px; }
+    .card h2 { margin: 0 0 12px; font-size: 15px; }
+    .stat { font-size: 25px; font-weight: 650; }
+    .label, .muted { color: #8795a5; font-size: 12px; }
+    .row { display: grid; grid-template-columns: 1fr auto; gap: 12px; padding: 9px 0; border-bottom: 1px solid #1d2630; }
     .row:last-child { border-bottom: 0; }
-    .value { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: #b9c8d9; }
-    .badge { display: inline-block; padding: 3px 8px; border-radius: 999px; background: #1d2935; color: #9fb1c4; font-size: 12px; }
-    .badge.ok { background: #153325; color: #73d69a; }
-    .error { color: #ff8f8f; }
+    .sub { margin-top: 3px; color: #718092; font-size: 12px; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .badge { display: inline-block; padding: 3px 8px; border-radius: 999px; background: #27313c; color: #aebccc; font-size: 11px; white-space: nowrap; }
+    .ok { background: #153325; color: #73d69a; }
+    .warn { background: #3b3016; color: #e4c477; }
     a { color: #82b7ff; text-decoration: none; }
-    a:hover { text-decoration: underline; }
-    @media (max-width: 600px) { header { padding: 22px 18px 16px; } main { padding: 18px 12px 36px; } }
+    @media (max-width: 850px) { .stats, .grid { grid-template-columns: 1fr; } main { padding: 12px; } header { padding: 20px; } }
   </style>
 </head>
 <body>
   <header>
     <h1>UART Emulator</h1>
-    <p>Управление виртуальными BMC и протоколами</p>
+    <p>Virtual BMC and protocol management</p>
   </header>
   <main>
+    <div class="stats">
+      <section class="card"><div class="label">SERVER</div><div id="status" class="stat">—</div></section>
+      <section class="card"><div class="label">ACTIVE SESSIONS</div><div id="active" class="stat">—</div></section>
+      <section class="card"><div class="label">DEVICES</div><div id="device-count" class="stat">—</div></section>
+      <section class="card"><div class="label">PROTOCOLS</div><div id="protocol-count" class="stat">—</div></section>
+    </div>
+
     <div class="grid">
       <section class="card">
-        <h2>Система</h2>
-        <div class="row"><span>Статус</span><span id="status" class="badge">...</span></div>
-        <div class="row"><span>UART clients</span><span id="clients" class="value">—</span></div>
-        <div class="row"><span>API</span><a href="./docs">Swagger UI</a></div>
+        <h2>Devices</h2>
+        <div id="devices" class="muted">Loading...</div>
       </section>
-
       <section class="card">
-        <h2>Протоколы</h2>
-        <div id="protocols" class="muted">Загрузка...</div>
+        <h2>Client sessions</h2>
+        <div id="clients" class="muted">Loading...</div>
       </section>
-
       <section class="card">
-        <h2>Устройства</h2>
-        <div id="devices" class="muted">Загрузка...</div>
+        <h2>Protocols</h2>
+        <div id="protocols" class="muted">Loading...</div>
       </section>
-
       <section class="card">
-        <h2>Подключённые клиенты</h2>
-        <div id="client-list" class="muted">Загрузка...</div>
+        <h2>Tools</h2>
+        <div class="row"><span>API documentation</span><a href="./docs">Swagger UI</a></div>
+        <div class="row"><span>Refresh interval</span><span class="badge">5 seconds</span></div>
       </section>
     </div>
   </main>
@@ -61,10 +67,14 @@
   <script>
     const api = './api';
 
-    function rows(items, formatter) {
-      if (!items.length) return '<span class="muted">Нет данных</span>';
-      return items.map(formatter).join('');
-    }
+    const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    const fmtDuration = seconds => {
+      seconds = Number(seconds || 0);
+      const h = Math.floor(seconds / 3600);
+      const m = Math.floor((seconds % 3600) / 60);
+      const s = seconds % 60;
+      return `${h}h ${m}m ${s}s`;
+    };
 
     async function load() {
       try {
@@ -72,28 +82,30 @@
           fetch(`${api}/status`).then(r => r.json()),
           fetch(`${api}/protocols`).then(r => r.json()),
           fetch(`${api}/devices`).then(r => r.json()),
-          fetch(`${api}/clients`).then(r => r.json()),
+          fetch(`${api}/clients`).then(r => r.json())
         ]);
 
-        const statusNode = document.getElementById('status');
-        statusNode.textContent = status.status;
-        statusNode.className = 'badge ok';
-        document.getElementById('clients').textContent = status.clients;
+        document.getElementById('status').innerHTML = `<span class="badge ok">${esc(status.status)}</span>`;
+        document.getElementById('active').textContent = status.clients;
+        document.getElementById('device-count').textContent = devices.length;
+        document.getElementById('protocol-count').textContent = protocols.length;
 
-        document.getElementById('protocols').innerHTML = rows(protocols, p => `
-          <div class="row"><span>${p.device || p.module}</span><span class="value">${p.version || '—'}</span></div>
-        `);
+        document.getElementById('devices').innerHTML = devices.length ? devices.map(d => `
+          <div class="row">
+            <div><strong>${esc(d.name)}</strong><div class="sub mono">id=${esc(d.id)} · identity=${esc(d.identity)}</div></div>
+            <div><span class="badge">${esc(d.protocol)}</span><div class="sub">${d.state_entries} state entries</div></div>
+          </div>`).join('') : '<span class="muted">No devices</span>';
 
-        document.getElementById('devices').innerHTML = rows(devices, d => `
-          <div class="row"><span>${d.name}</span><span class="badge">${d.protocol}</span></div>
-        `);
+        document.getElementById('clients').innerHTML = clients.length ? clients.map(c => `
+          <div class="row">
+            <div><strong class="mono">${esc(c.host)}:${esc(c.port)}</strong><div class="sub mono">${esc(c.client_key)}</div><div class="sub">${esc(c.device_name || 'unassigned')} · ${esc(c.device_protocol || '—')}</div></div>
+            <div style="text-align:right"><span class="badge ${c.connected ? 'ok' : ''}">${c.connected ? 'connected' : 'offline'}</span><div class="sub">${fmtDuration(c.session_duration_seconds)}</div><div class="sub">${c.requests} req · ${c.responses} resp</div></div>
+          </div>`).join('') : '<span class="muted">No sessions</span>';
 
-        document.getElementById('client-list').innerHTML = rows(clients, c => `
-          <div class="row"><span>${c.host}:${c.port}</span><span class="badge">${c.connected ? 'connected' : 'offline'}</span></div>
-        `);
+        document.getElementById('protocols').innerHTML = protocols.length ? protocols.map(p => `
+          <div class="row"><div><strong>${esc(p.device || p.module)}</strong><div class="sub">${esc(p.description || '')}</div></div><span class="badge">${esc(p.version || 'unknown')}</span></div>`).join('') : '<span class="muted">No protocols</span>';
       } catch (error) {
-        document.getElementById('status').textContent = 'error';
-        document.getElementById('status').className = 'badge error';
+        document.getElementById('status').innerHTML = '<span class="badge warn">error</span>';
         console.error(error);
       }
     }
