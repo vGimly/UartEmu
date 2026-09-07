@@ -27,9 +27,8 @@ def _load(protocol):
     return module
 
 
-def _create(protocol, client):
-    module = _load(protocol)
-    return module.Protocol(client)
+def create(protocol, client):
+    return _load(protocol).Protocol(client)
 
 
 def validate_protocol(protocol):
@@ -54,7 +53,7 @@ def reload(protocol=None):
 
 def command(protocol, client, cmd, payload):
     try:
-        instance = _create(protocol, client)
+        instance = create(protocol, client)
     except ImportError:
         log.error("unknown protocol module: %s", protocol)
         return None
