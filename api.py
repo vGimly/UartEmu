@@ -8,6 +8,13 @@ import app_loader
 import registry
 
 router = APIRouter()
+_uart_server = None
+
+
+def set_uart_server(server):
+    """Set the UART server used by API helpers outside request state."""
+    global _uart_server
+    _uart_server = server
 
 
 class EventRequest(BaseModel):
