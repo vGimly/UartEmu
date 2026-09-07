@@ -124,11 +124,12 @@ class UARTServer:
             return
 
         protocol_name = registry.protocol_for_client(client_key)
-        protocol = self.protocols.get(client_key)
-        if protocol is None or protocol_name != protocol.__class__.__module__.split(".")[-1]:
-            protocol = app_loader.create(protocol_name, client)
-            self.protocols[client_key] = protocol
+        protocol_entry = self.protocols.get(client_key)
+        if protocol_entry is None or protocol_entry[0] != protocol_name:
+            protocol_entry = (protocol_name, app_loader.create(protocol_name, client))
+            self.protocols[client_key] = protocol_entry
 
+        protocol = protocol_entry[1]
         try:
             answer = protocol.command(frame.cmd, frame.payload)
         except ProtocolError as exc:
