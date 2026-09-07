@@ -4,7 +4,8 @@ import logging
 import app_loader
 import registry
 
-from protocol import CMD_IDENTIFY, Frame, FrameError, ProtocolError, encode_error, encode_frame
+from protocol import CMD_IDENTIFY, Frame, FrameError, ProtocolError, encode_error, encode_frame, FrameParser
+from state import DeviceState
 
 
 log = logging.getLogger("uart")
@@ -18,6 +19,7 @@ class UARTServer:
         self.clients = {}
         self.traffic_logging = True
         self.protocols = {}
+        self.state = DeviceState()
 
     async def start(self):
         self.server = await asyncio.start_server(self.client_connected, self.host, self.port)
@@ -114,22 +116,30 @@ class UARTServer:
                 log.exception("event delivery failed: %s", peer)
         return count
 
+    def get_protocol(self, client_key):
+        protocol_name = registry.protocol_for_client(client_key)
+        entry = self.protocols.get(client_key)
+        if entry is not None and entry[0] == protocol_name:
+            return entry[1]
+
+        client = registry.get_client(client_key)
+        if client is None:
+            return None
+
+        protocol = app_loader.create(protocol_name, client, self.state)
+        self.protocols[client_key] = (protocol_name, protocol)
+        return protocol
+
     async def handle_frame(self, writer, peer, client_key, frame):
         if frame.cmd == CMD_IDENTIFY:
             await self.handle_identify(writer, peer, client_key, frame.payload)
             return
 
-        client = registry.get_client(client_key)
-        if client is None:
+        protocol = self.get_protocol(client_key)
+        if protocol is None:
+            log.warning("no protocol for client %s", client_key)
             return
 
-        protocol_name = registry.protocol_for_client(client_key)
-        protocol_entry = self.protocols.get(client_key)
-        if protocol_entry is None or protocol_entry[0] != protocol_name:
-            protocol_entry = (protocol_name, app_loader.create(protocol_name, client))
-            self.protocols[client_key] = protocol_entry
-
-        protocol = protocol_entry[1]
         try:
             answer = protocol.command(frame.cmd, frame.payload)
         except ProtocolError as exc:
