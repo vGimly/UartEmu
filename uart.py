@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import app_loader
+import registry
 
 from protocol import (
     Frame,
@@ -58,6 +59,10 @@ class UARTServer:
         self.clients.add(writer)
 
         peer = writer.get_extra_info("peername")
+        host = peer[0] if peer else "unknown"
+        port = peer[1] if peer else 0
+
+        registry.record_connect(host, port)
 
         log.info(
             "client connected: %s",
@@ -113,6 +118,8 @@ class UARTServer:
 
         finally:
             self.clients.discard(writer)
+
+            registry.record_disconnect(host)
 
             writer.close()
 
@@ -205,7 +212,11 @@ class UARTServer:
         return count
 
     async def handle_frame(self, writer, peer, frame):
+        host = peer[0] if peer else "unknown"
+        protocol = registry.protocol_for_host(host)
+
         answer = app_loader.command(
+            protocol,
             peer,
             frame.cmd,
             frame.payload,

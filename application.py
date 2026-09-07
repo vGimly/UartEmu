@@ -1,5 +1,12 @@
-from state import DeviceState
+"""
+device: generic
+version: 1.0.0
+description: Протокол по умолчанию — эхо, чтение/запись регистров, время устройства.
+"""
+
 import datetime
+
+from state import DeviceState
 
 state = DeviceState()
 
