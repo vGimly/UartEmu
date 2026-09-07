@@ -1,66 +1,253 @@
-UART Emulator
+# UART Emulator
 
-Эмулятор UART-устройства с TCP-интерфейсом, бинарным кадровым протоколом, динамически перезагружаемым application-слоем и HTTP API для управления и диагностики.
+Эмулятор UART-устройства с TCP-интерфейсом, бинарным кадровым протоколом, несколькими версиями протокола, виртуальными устройствами, независимым состоянием устройств и HTTP API для управления и диагностики.
 
 Проект предназначен для разработки и тестирования клиентских UART-утилит без наличия реального устройства BMC.
 
 ## Архитектура
 
 ```text
-                    HTTP API
-                       │
-                       ▼
-                 ┌───────────┐
-                 │  api.py   │
-                 └─────┬─────┘
-                       │
-                       ▼
-                 ┌───────────┐
-                 │app_loader │
-                 └─────┬─────┘
-                       │
-                       ▼
-                 ┌──────────────┐
-                 │ application  │
-                 └──────┬───────┘
-                        │
-                        ▼
-                    ┌───────┐
-                    │ state │
-                    └───────┘
-
-TCP :7000
-    │
-    ▼
-┌───────────┐
-│  uart.py  │
+                           HTTP API / Web UI
+                                  │
+                                  ▼
+                             ┌──────────┐
+                             │ registry │
+                             └────┬─────┘
+                                  │
+             ┌────────────────────┼────────────────────┐
+             │                    │                    │
+             ▼                    ▼                    ▼
+          sessions              devices             protocols
+             │                    │                    │
+             │                    │                    ▼
+             │                    │               app_loader
+             │                    │                    │
+             │                    └───────┬────────────┘
+             │                            │
+TCP :7000    │                            ▼
+    │        │                       protocol instance
+    ▼        │                            │
+┌───────────┐│                            ├── client
+│  uart.py  │┘                            └── state
 └─────┬─────┘
       │
       ▼
 ┌──────────────┐
-│  protocol.py │
-└──────┬───────┘
-       │
-       ▼
-  application
+│ protocol.py  │
+└──────────────┘
 ```
 
 ### Основные компоненты
 
-* `uart.py` — TCP-сервер, имитирующий UART.
-* `protocol.py` — разбор и формирование UART-кадров.
-* `application.py` — логика команд виртуального устройства.
-* `app_loader.py` — загрузка и перезагрузка application-слоя без остановки UART-сервера.
+* `uart.py` — TCP-сервер, управляющий TCP sessions и маршрутизацией команд.
+* `protocol.py` — frame parser/encoder, `BaseProtocol`, общие protocol helpers и `ProtocolError`.
+* `protocols/` — реализации конкретных версий протоколов. Каждый файл содержит минимальное описание устройства в module docstring.
+* `app_loader.py` — inventory, загрузка и создание экземпляров протоколов.
+* `registry.py` — связь client sessions и virtual devices, а также управление подключениями и session statistics.
+* `state.py` — SQLite-хранилище состояния виртуальных устройств.
+* `db.py` — SQLite schema, initialization и migration.
 * `api.py` — HTTP API управления эмулятором.
-* `state.py` — постоянное хранилище состояния устройства.
+* `templates/` — Web UI.
 * `main.py` — запуск HTTP API и UART-сервера.
 * `t/` — тесты.
+
+## Virtual devices and client sessions
+
+Эмулятор моделирует набор независимых виртуальных BMC, а не одно глобальное устройство.
+
+Каждое TCP-соединение получает уникальный `client_key`. IP-адрес и TCP-порт являются атрибутами текущей session и не используются как её identity.
+
+```text
+TCP connection
+      │
+      ▼
+ client_key
+      │
+      ▼
+ client session
+      │
+      │ device_id
+      ▼
+ virtual device
+      │
+      ├── DEVICE_ID
+      ├── protocol
+      └── state
+```
+
+Поэтому несколько клиентов с одного IP могут одновременно работать с разными виртуальными устройствами:
+
+```text
+10.0.0.5:40001 → DEVICE_ID=br850-a → BR850 r0 → state A
+10.0.0.5:40002 → DEVICE_ID=br850-b → BR850 r1 → state B
+10.0.0.5:40003 → DEVICE_ID=test-a   → another protocol → state C
+```
+
+Состояние принадлежит `device_id`, а не TCP session и не protocol module. Поэтому reconnect с тем же `DEVICE_ID` получает состояние соответствующего virtual device.
+
+## Device identification
+
+После подключения клиент может выбрать виртуальное устройство командой `0xFE`.
+
+```text
+0xFE <DEVICE_ID in UTF-8>
+```
+
+`DEVICE_ID` — UTF-8 строка, идентифицирующая virtual device.
+
+Команда `0xFE` обрабатывается самим `UARTServer` и не передаётся application protocol. После успешной идентификации текущая protocol instance сбрасывается и создаётся заново для выбранного устройства.
+
+Если `DEVICE_ID` неизвестен или payload не является корректным UTF-8, текущая идентичность клиента не изменяется и возвращается `E-*` ошибка.
+
+## Protocol inventory
+
+Все реализации протоколов находятся в `protocols/`.
+
+`app_loader` сканирует эти файлы и извлекает metadata из module docstring без импорта модуля.
+
+Минимальный заголовок протокола:
+
+```python
+"""
+device: pzbx_br850-r0
+version: 1.0.1
+description: PZBX BR850 protocol revision 0
+"""
+```
+
+Таким образом, доступные устройства и версии протокола автоматически определяются по содержимому `protocols/`.
+
+Общие protocol helpers находятся в `protocol.py`, поэтому файлы в `protocols/` содержат только implementation details конкретного протокола.
+
+## Protocol classes
+
+Каждый protocol instance привязан к одной client session и получает client context и общее state storage:
+
+```python
+class BaseProtocol:
+    def __init__(self, client, state):
+        self.client = client
+        self.state = state
+```
+
+Конкретный протокол реализует:
+
+```python
+class Protocol(BaseProtocol):
+    def command(self, cmd, payload):
+        ...
+```
+
+Внутри протокола доступны:
+
+```python
+self.client
+self.state
+self.register_read_write(...)
+```
+
+без передачи `client` отдельным аргументом в каждую функцию.
+
+## Errors
+
+Ошибки application protocol не кодируются отрицательными числовыми значениями. Они представлены исключением `ProtocolError` и превращаются UART server в текстовый результат с префиксом `E-`.
+
+Например:
+
+```python
+raise ProtocolError("INVALID_VALUE")
+```
+
+возвращает:
+
+```text
+E-INVALID_VALUE
+```
+
+Это позволяет использовать отрицательные значения регистров как обычные данные.
+
+Ошибки кадрового уровня имеют отдельные числовые коды:
+
+```text
+0x80  timeout
+0x81  short frame
+0x82  bad CRC
+0x83  invalid escape
+0x84  garbage before start
+```
+
+Они возвращаются как кадр с командой `0xFF`.
+
+## Session statistics
+
+Для каждой client session ведутся:
+
+* `client_key`;
+* source host and port;
+* connection status;
+* `connected_at`;
+* текущая длительность session;
+* `requests`;
+* `responses`;
+* `first_seen` / `last_seen`;
+* выбранный `device` и `DEVICE_ID`;
+* выбранный protocol.
+
+Счётчики `requests` и `responses` относятся к конкретной TCP session и не агрегируются по IP.
+
+Web UI показывает текущие sessions, назначенные devices, protocol и state, а также время подключения, длительность и счётчики request/response.
+
+## SQLite model
+
+Основные сущности:
+
+```text
+clients
+  client_key
+  host
+  port
+  device_id
+  connected
+  connected_at
+  requests
+  responses
+
+        │
+        │ device_id
+        ▼
+
+devices
+  id
+  identity
+  name
+  protocol
+  description
+
+        │
+        │ device_id
+        ▼
+
+state
+  device_id
+  address
+  value
+```
+
+`state` имеет составной ключ `(device_id, address)`, поэтому одинаковый register address может иметь разные значения на разных виртуальных устройствах.
+
+Database initialization/migration выполняется через `db.py`.
 
 ## Запуск
 
 Проект использует Python virtual environment.
 
 Создание окружения и установка зависимостей:
+
+```bash
+make init
+```
+
+После добавления новых Python packages также необходимо выполнить:
 
 ```bash
 make init
@@ -98,9 +285,15 @@ UART доступен клиентам по адресу `10.9.0.1:7000`.
     --reload
 ```
 
-При изменении Python-кода перезагружается application/server layer, но существующий TCP UART-сервис не должен требовать переподключения клиента.
+## Web UI and API
 
-## UART-клиент
+Web UI доступен по корневому HTTP endpoint приложения.
+
+Swagger UI сохраняется по адресу `/docs` и используется для интерактивного просмотра и тестирования API.
+
+Web UI предназначен для наблюдения за текущим состоянием emulator model: sessions, devices, protocols и state.
+
+## UART client
 
 Для подключения к TCP UART удобно использовать `socat`:
 
@@ -126,7 +319,7 @@ make client
 ./uart0
 ```
 
-## Протокол
+## Protocol framing
 
 Кадр имеет вид:
 
@@ -157,420 +350,24 @@ ESC   = 0x7d
 
 ### CRC16
 
-CRC вычисляется по данным кадра согласно реализации `protocol.py`.
+CRC вычисляется по исходным данным кадра до escaping согласно реализации `protocol.py`.
 
 CRC передаётся двумя байтами.
 
-При проверке используется исходное значение CRC до escaping.
+## Development
 
-### Ошибки протокола
-
-Эмулятор генерирует error event при ошибках входного потока.
-
-Коды:
+Рабочая ветка разработки:
 
 ```text
-0x80  timeout
-0x81  short frame
-0x82  bad CRC
-0x83  invalid escape
+redesign/dev-mgmt
 ```
 
-Также отдельно диагностируется мусор, поступающий до `START`.
-
-Ответ об ошибке формируется как обычный UART-кадр:
-
-```text
-START
-FF
-error_code
-CRC16
-STOP
-```
-
-То есть:
-
-```text
-0x7e 0xff <error_code> <crc16> 0x7e
-```
-
-Все ошибки и переходы parser state подробно логируются.
-
-## Команды
-
-### Команда `0x01`
-
-Простейшая echo-команда.
-
-```text
-request:
-01 <payload>
-
-response:
-01 OK=<payload>
-```
-
-Например:
-
-```text
-01 hello
-```
-
-возвращает:
-
-```text
-01 OK=hello
-```
-
-### Команда `0x02`
-
-Работа с регистром состояния.
-
-`0x02` — идентификатор регистра.
-
-Первый байт payload определяет операцию:
-
-```text
-0x01 = read
-0x02 = write
-```
-
-После operation могут присутствовать до пяти байтов `0x00`, которые игнорируются.
-
-#### Read
-
-```text
-02 01
-```
-
-Ответ содержит текущее значение регистра в ASCII:
-
-```text
-02 "-123"
-```
-
-#### Write
-
-```text
-02 02 "-123"
-```
-
-После успешной записи возвращается ACK:
-
-```text
-02
-```
-
-Значение передаётся как signed decimal ASCII.
-
-Например:
-
-```text
--512
--123
-0
-42
-511
-```
-
-При некорректном значении команда остаётся валидной командой, но возвращает:
-
-```text
--1
-```
-
-`None` для такой ошибки не используется, поскольку клиент должен получить ответ.
-
-### Команда `0x03`
-
-Возвращает локальные дату и время эмулятора:
-
-```text
-YYYYMMDD HHMMSS
-```
-
-Например:
-
-```text
-20260904 181505
-```
-
-## Состояние устройства
-
-Состояние хранится в `state.py`.
-
-Для хранения используется SQLite.
-
-Это позволяет:
-
-* сохранять состояние после перезапуска;
-* атомарно выполнять read/write;
-* хранить несколько регистров;
-* не связывать состояние с TCP-соединением.
-
-Текущий state является общим для эмулятора.
-
-То есть два UART-клиента видят одно и то же состояние устройства.
-
-## Application layer
-
-`uart.py` не содержит реализации команд.
-
-После успешного разбора кадра он передаёт команду в application layer:
-
-```python
-application.command(client, cmd, payload)
-```
-
-Это позволяет изменять поведение виртуального устройства без изменения UART transport/protocol слоя.
-
-`app_loader.py` используется для динамической загрузки application-модуля.
-
-Цель такой архитектуры — возможность менять команды виртуального устройства во время работы эмулятора, не разрывая существующие TCP-соединения.
-
-## HTTP API
-
-HTTP API слушает только:
-
-```text
-127.0.0.1:8000
-```
-
-### Logging
-
-Получить состояние traffic logging:
-
-```http
-GET /api/logging
-```
-
-Включить:
-
-```http
-PUT /api/logging
-```
-
-Отключить:
-
-```http
-PUT /api/logging
-```
-
-Параметры API определяются реализацией `api.py`.
-
-Traffic logging используется для диагностики реального обмена UART.
-
-Пример лога:
-
-```text
-2026-09-04 14:07:17 INFO uart: client connected: ('10.9.0.1', 49976)
-2026-09-04 14:07:21 DEBUG uart: RX ('10.9.0.1', 49976): 68 65 6c 6c 6f 0a
-```
-
-### State
-
-Получить текущее состояние:
-
-```http
-GET /api/state
-```
-
-Пример:
-
-```json
-{
-  "0x02": -123
-}
-```
-
-### Events
-
-HTTP API позволяет инжектировать event в подключённых UART-клиентов.
-
-Это используется для тестирования поведения клиентской утилиты при получении событий от устройства.
-
-## Логирование
-
-Логи являются важной частью диагностики.
-
-Используются как минимум следующие логгеры:
-
-```text
-uart
-uart.protocol
-```
-
-Логируются:
-
-* подключение/отключение клиентов;
-* входящий traffic;
-* исходящий traffic;
-* обнаружение `START`;
-* обнаружение `STOP`;
-* успешно разобранные кадры;
-* CRC;
-* protocol errors;
-* invalid escape;
-* timeout;
-* garbage;
-* ошибки application layer.
-
-Traffic logging можно включать и отключать через HTTP API.
-
-## Тесты
-
-Тесты написаны на `pytest`.
-
-Запустить все:
+Перед запуском тестов после изменения зависимостей:
 
 ```bash
-make test
+make init
 ```
 
-или:
+Тесты запускаются через pytest.
 
-```bash
-.venv/bin/pytest -v t
-```
-
-Тесты организованы по задачам:
-
-```text
-t/
-├── api/
-│   ├── test_01_logging.py
-│   ├── test_02_logging.py
-│   └── ...
-│
-├── protocol/
-│   ├── test_01_good.py
-│   ├── test_02_escape.py
-│   ├── test_03_errors.py
-│   ├── test_04_stream.py
-│   └── ...
-│
-├── uart/
-│   ├── test_01_good_frame.py
-│   ├── test_02_errors.py
-│   ├── test_03_stream.py
-│   ├── ...
-│   └── test_07_param_02.py
-│
-├── lib/
-│   ├── __init__.py
-│   └── uart.py
-│
-└── test_event.py
-```
-
-### Protocol tests
-
-Проверяют непосредственно parser/encoder:
-
-* обычные кадры;
-* пустой payload;
-* бинарный payload;
-* escaping `0x7e`;
-* escaping `0x7d`;
-* invalid escape;
-* короткие кадры;
-* bad CRC;
-* garbage;
-* split frame;
-* несколько кадров в одном TCP chunk.
-
-### UART tests
-
-Проверяют уже настоящий TCP UART-сервис:
-
-* обычный request/response;
-* ошибки протокола;
-* разрыв кадров;
-* несколько клиентов;
-* команды application layer;
-* register read/write;
-* datetime;
-* event injection.
-
-Для уменьшения дублирования в `t/lib/uart.py` есть высокоуровневые helpers:
-
-```python
-uart_command()
-uart_get()
-uart_set()
-```
-
-Поэтому тест команды обычно выглядит примерно так:
-
-```python
-await uart_set(reader, writer, 0x02, value)
-
-result = await uart_get(reader, writer, 0x02)
-
-assert result == str(value).encode("ascii")
-```
-
-## Makefile
-
-Основные цели:
-
-```text
-make init      create venv and install requirements
-make req       update requirements.txt
-make run       run server
-make start     run server in screen
-make client    create UART pseudo-terminal using socat
-make test      run pytest
-```
-
-Для Python-зависимостей используется:
-
-```text
-.venv/
-requirements.txt
-```
-
-`requirements.txt` генерируется через `pip freeze`.
-
-`pkg_resources==0.0.0` не является самостоятельной устанавливаемой зависимостью и не должен попадать в `requirements.txt`.
-
-## Nginx
-
-Внешний доступ к UART HTTP API может проксироваться через nginx.
-
-Типовая схема:
-
-```text
-client
-   │
-   ▼
- nginx
-   │
-   ├── /uart/      → UART web interface
-   └── /uart/api   → 127.0.0.1:8000
-```
-
-Сам HTTP application server остаётся доступен только на:
-
-```text
-127.0.0.1:8000
-```
-
-UART TCP server при этом отдельно слушает:
-
-```text
-10.9.0.1:7000
-```
-
-## Цели проекта
-
-Основная задача эмулятора — дать реальному UART-клиенту ощущение настоящего устройства:
-
-* клиент подключается к UART и не знает, что это TCP;
-* протокол обрабатывается побайтно;
-* ошибки протокола воспроизводятся и диагностируются;
-* состояние устройства сохраняется;
-* команды можно добавлять и изменять без остановки transport layer;
-* события можно инжектировать через HTTP API;
-* весь обмен можно подробно логировать;
-* поведение проверяется автоматическими pytest-тестами.
+Новые protocol implementations должны находиться в `protocols/`, содержать metadata docstring и наследовать `BaseProtocol` через экспорт класса `Protocol`.
