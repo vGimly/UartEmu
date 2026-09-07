@@ -54,3 +54,14 @@ async def index(request: Request):
         name="index.html",
         context={"title": "UART Emulator"},
     )
+
+
+@app.get("/devices/{device_id}", response_class=HTMLResponse)
+async def device(request: Request, device_id: int):
+    if request.app.state.uart.state is None:
+        return HTMLResponse("Device state is unavailable", status_code=503)
+    return templates.TemplateResponse(
+        request=request,
+        name="device.html",
+        context={"title": "Device state", "device_id": device_id},
+    )
