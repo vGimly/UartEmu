@@ -4,7 +4,7 @@ import logging
 import app_loader
 import registry
 
-from protocol import CMD_IDENTIFY, Frame, FrameParser, ProtocolError, encode_error, encode_frame
+from protocol import CMD_IDENTIFY, Frame, FrameError, ProtocolError, encode_error, encode_frame
 
 
 log = logging.getLogger("uart")
@@ -17,6 +17,7 @@ class UARTServer:
         self.server = None
         self.clients = {}
         self.traffic_logging = True
+        self.protocols = {}
 
     async def start(self):
         self.server = await asyncio.start_server(self.client_connected, self.host, self.port)
@@ -31,6 +32,7 @@ class UARTServer:
             except Exception:
                 pass
         self.clients.clear()
+        self.protocols.clear()
         if self.server is not None:
             self.server.close()
             await self.server.wait_closed()
@@ -68,6 +70,7 @@ class UARTServer:
             log.exception("client handler failed: %s", peer)
         finally:
             self.clients.pop(writer, None)
+            self.protocols.pop(client_key, None)
             registry.record_disconnect(client_key)
             writer.close()
             try:
@@ -86,9 +89,9 @@ class UARTServer:
             await self.handle_frame(writer, peer, client_key, event)
             return
 
-        if isinstance(event, ProtocolError):
+        if isinstance(event, FrameError):
             log.warning(
-                "PROTOCOL ERROR %s key=%s: code=0x%02x %s",
+                "FRAME ERROR %s key=%s: code=0x%02x %s",
                 peer, client_key, event.code, event.detail,
             )
             await self.send_error(writer, peer, client_key, event.code)
@@ -120,8 +123,21 @@ class UARTServer:
         if client is None:
             return
 
-        protocol = registry.protocol_for_client(client_key)
-        answer = app_loader.command(protocol, client, frame.cmd, frame.payload)
+        protocol_name = registry.protocol_for_client(client_key)
+        protocol = self.protocols.get(client_key)
+        if protocol is None or protocol_name != protocol.__class__.__module__.split(".")[-1]:
+            protocol = app_loader.create(protocol_name, client)
+            self.protocols[client_key] = protocol
+
+        try:
+            answer = protocol.command(frame.cmd, frame.payload)
+        except ProtocolError as exc:
+            log.warning(
+                "APPLICATION ERROR %s key=%s cmd=0x%02x: %s",
+                peer, client_key, frame.cmd, exc,
+            )
+            answer = exc.payload()
+
         if answer is None:
             log.warning("unknown command %s: 0x%02x", peer, frame.cmd)
             return
@@ -132,19 +148,20 @@ class UARTServer:
         try:
             identity = payload.decode("utf-8")
         except UnicodeDecodeError:
-            await self.send(writer, peer, client_key, encode_frame(CMD_IDENTIFY, b"-1"))
+            await self.send(writer, peer, client_key, encode_frame(CMD_IDENTIFY, b"E-INVALID_UTF8"))
             return
 
         if not identity:
-            await self.send(writer, peer, client_key, encode_frame(CMD_IDENTIFY, b"-2"))
+            await self.send(writer, peer, client_key, encode_frame(CMD_IDENTIFY, b"E-EMPTY_ID"))
             return
 
         client = registry.identify_client(client_key, identity)
         if client is None:
             log.warning("unknown device identity %r for client %s", identity, client_key)
-            await self.send(writer, peer, client_key, encode_frame(CMD_IDENTIFY, b"-3"))
+            await self.send(writer, peer, client_key, encode_frame(CMD_IDENTIFY, b"E-UNKNOWN_DEVICE"))
             return
 
+        self.protocols.pop(client_key, None)
         log.info(
             "client identified: key=%s identity=%s device=%s protocol=%s",
             client_key, identity, client["device_id"], client["device_protocol"],
