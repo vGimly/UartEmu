@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ title }}</title>
+  <style>
+    :root { color-scheme: dark; font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; background: #0b0f14; color: #e7edf5; }
+    header { padding: 28px 32px 20px; border-bottom: 1px solid #202833; background: #10151c; }
+    header h1 { margin: 0 0 6px; font-size: 24px; }
+    header p { margin: 0; color: #8d9aaa; }
+    main { max-width: 1200px; margin: 0 auto; padding: 24px 20px 48px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+    .card { background: #111820; border: 1px solid #222d39; border-radius: 12px; padding: 18px; box-shadow: 0 8px 30px rgba(0,0,0,.18); }
+    .card h2 { margin: 0 0 14px; font-size: 16px; }
+    .muted { color: #8795a5; }
+    .row { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid #1d2630; }
+    .row:last-child { border-bottom: 0; }
+    .value { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: #b9c8d9; }
+    .badge { display: inline-block; padding: 3px 8px; border-radius: 999px; background: #1d2935; color: #9fb1c4; font-size: 12px; }
+    .badge.ok { background: #153325; color: #73d69a; }
+    .error { color: #ff8f8f; }
+    a { color: #82b7ff; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    @media (max-width: 600px) { header { padding: 22px 18px 16px; } main { padding: 18px 12px 36px; } }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>UART Emulator</h1>
+    <p>Управление виртуальными BMC и протоколами</p>
+  </header>
+  <main>
+    <div class="grid">
+      <section class="card">
+        <h2>Система</h2>
+        <div class="row"><span>Статус</span><span id="status" class="badge">...</span></div>
+        <div class="row"><span>UART clients</span><span id="clients" class="value">—</span></div>
+        <div class="row"><span>API</span><a href="./docs">Swagger UI</a></div>
+      </section>
+
+      <section class="card">
+        <h2>Протоколы</h2>
+        <div id="protocols" class="muted">Загрузка...</div>
+      </section>
+
+      <section class="card">
+        <h2>Устройства</h2>
+        <div id="devices" class="muted">Загрузка...</div>
+      </section>
+
+      <section class="card">
+        <h2>Подключённые клиенты</h2>
+        <div id="client-list" class="muted">Загрузка...</div>
+      </section>
+    </div>
+  </main>
+
+  <script>
+    const api = './api';
+
+    function rows(items, formatter) {
+      if (!items.length) return '<span class="muted">Нет данных</span>';
+      return items.map(formatter).join('');
+    }
+
+    async function load() {
+      try {
+        const [status, protocols, devices, clients] = await Promise.all([
+          fetch(`${api}/status`).then(r => r.json()),
+          fetch(`${api}/protocols`).then(r => r.json()),
+          fetch(`${api}/devices`).then(r => r.json()),
+          fetch(`${api}/clients`).then(r => r.json()),
+        ]);
+
+        const statusNode = document.getElementById('status');
+        statusNode.textContent = status.status;
+        statusNode.className = 'badge ok';
+        document.getElementById('clients').textContent = status.clients;
+
+        document.getElementById('protocols').innerHTML = rows(protocols, p => `
+          <div class="row"><span>${p.device || p.module}</span><span class="value">${p.version || '—'}</span></div>
+        `);
+
+        document.getElementById('devices').innerHTML = rows(devices, d => `
+          <div class="row"><span>${d.name}</span><span class="badge">${d.protocol}</span></div>
+        `);
+
+        document.getElementById('client-list').innerHTML = rows(clients, c => `
+          <div class="row"><span>${c.host}:${c.port}</span><span class="badge">${c.connected ? 'connected' : 'offline'}</span></div>
+        `);
+      } catch (error) {
+        document.getElementById('status').textContent = 'error';
+        document.getElementById('status').className = 'badge error';
+        console.error(error);
+      }
+    }
+
+    load();
+    setInterval(load, 5000);
+  </script>
+</body>
+</html>
