@@ -11,8 +11,6 @@ PROTOCOLS_DIR = os.path.join(
     PROTOCOLS_PACKAGE,
 )
 
-# name -> imported module object, cached so repeated commands don't
-# re-import, and so reload() can find the right module to reload.
 _modules = {}
 
 
@@ -26,7 +24,6 @@ def _load(protocol):
 
     module = importlib.import_module("%s.%s" % (PROTOCOLS_PACKAGE, protocol))
     _modules[protocol] = module
-
     return module
 
 
@@ -35,16 +32,10 @@ def validate_protocol(protocol):
         _load(protocol)
     except ImportError:
         return False
-
     return True
 
 
 def reload(protocol=None):
-    """
-    Reload one protocol module, or all previously loaded ones when
-    `protocol` is None.
-    """
-
     importlib.invalidate_caches()
 
     if protocol is None:
@@ -66,39 +57,41 @@ def command(protocol, client, cmd, payload):
     return module.command(client, cmd, payload)
 
 
-def dump_state(protocol="default"):
+def dump_state(protocol, device_id):
     module = _load(protocol)
+    state = getattr(module, "state", None)
 
-    return module.state.dump()
+    if state is None or device_id is None:
+        return {}
+
+    return state.dump(device_id)
+
+
+def clear_state(protocol, device_id):
+    try:
+        module = _load(protocol)
+    except ImportError:
+        return
+
+    state = getattr(module, "state", None)
+    if state is not None and hasattr(state, "clear") and device_id is not None:
+        state.clear(device_id)
+        log.info(
+            "cleared state: device=%s protocol=%s",
+            device_id,
+            protocol,
+        )
 
 
 def _read_header(path):
-    """
-    Read `device` / `version` / `description` from the module's
-    docstring, WITHOUT importing (and therefore executing) the file.
-
-    Expected header format, as the first statement in the file:
-
-        \"\"\"
-        device: pzbx_br850-r0
-        version: 1.0.1
-        description: short human description
-        \"\"\"
-
-    Only what's declared here is trusted. The filename is just an
-    import handle (and must be a valid Python identifier, so it can't
-    even carry things like hyphens) -- never a source of metadata.
-    """
-
+    """Read protocol metadata from the module docstring without importing it."""
     metadata = {"device": None, "version": None, "description": None}
 
     try:
         with open(path, "r", encoding="utf-8") as f:
             source = f.read()
-
         tree = ast.parse(source, filename=path)
         docstring = ast.get_docstring(tree)
-
     except (OSError, SyntaxError, UnicodeDecodeError) as exc:
         log.warning("could not read header of %s: %s", path, exc)
         return metadata
@@ -108,13 +101,10 @@ def _read_header(path):
 
     for line in docstring.splitlines():
         line = line.strip()
-
         if not line or ":" not in line:
             continue
-
         key, _, value = line.partition(":")
         key = key.strip().lower()
-
         if key in metadata:
             metadata[key] = value.strip()
 
@@ -122,12 +112,6 @@ def _read_header(path):
 
 
 def list_protocols():
-    """
-    Discover protocol modules by scanning protocols/ on disk. Each
-    file's metadata is parsed from its header (see _read_header) --
-    modules are never imported just to build this listing.
-    """
-
     protocols = []
 
     if not os.path.isdir(PROTOCOLS_DIR):
@@ -138,12 +122,10 @@ def list_protocols():
             continue
 
         module_name = filename[:-3]
-        metadata = _read_header(_module_path(module_name))
-
         protocols.append(
             {
                 "module": module_name,
-                **metadata,
+                **_read_header(_module_path(module_name)),
             }
         )
 
