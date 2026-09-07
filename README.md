@@ -237,6 +237,27 @@ state
 
 Database initialization/migration выполняется через `db.py`.
 
+## State API and Web UI
+
+Состояние виртуального устройства доступно непосредственно через API:
+
+```text
+GET    /api/devices/{device_id}/state
+PUT    /api/devices/{device_id}/state/{address}
+DELETE /api/devices/{device_id}/state/{address}
+DELETE /api/devices/{device_id}/state
+```
+
+`PUT` создаёт новую запись или изменяет существующую, `DELETE` удаляет отдельный register, а удаление collection очищает всё состояние устройства.
+
+Для просмотра состояния используется страница:
+
+```text
+/devices/{device_id}
+```
+
+Dashboard содержит ссылку `Open state` для каждого virtual device. На странице устройства доступны просмотр, запись, удаление отдельных register и очистка всего state.
+
 ## Запуск
 
 Проект использует Python virtual environment.
