@@ -28,7 +28,7 @@ class LoggingConfig(BaseModel):
 
 class DeviceCreate(BaseModel):
     name: str
-    protocol: str = "application"
+    protocol: str = "default"
     description: str = ""
 
 
@@ -119,7 +119,7 @@ async def reload_app(protocol: Optional[str] = None):
 
 
 @router.get("/state")
-async def get_state(protocol: str = "application"):
+async def get_state(protocol: str = "default"):
     return app_loader.dump_state(protocol)
 
 
