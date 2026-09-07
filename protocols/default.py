@@ -26,3 +26,6 @@ class DefaultProtocol(BaseProtocol):
             return datetime.datetime.now().strftime("%Y%m%d %H%M%S").encode("ascii")
 
         return None
+
+
+Protocol = DefaultProtocol
